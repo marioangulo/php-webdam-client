@@ -334,16 +334,26 @@ class Client {
       'contenttype' => $file_type,
       'folderid' => $folderID,
     ];
-    $response = $this->client->request(
-      "GET",
-      $this->baseUrl . '/ws/awss3/generateupload',
-      [
-        'headers' => $this->getDefaultHeaders(),
-        'query' => $file_data,
-      ]
-    );
 
-    return json_decode($response->getBody());
+    try {
+      $response = $this->client->request(
+        "GET",
+        $this->baseUrl . '/ws/awss3/generateupload',
+        [
+          'headers' => $this->getDefaultHeaders(),
+          'query' => $file_data,
+        ]
+      );
+    }
+    catch (ClientException $e) {
+      $response = $e->getResponse()->getBody();
+      $response = json_decode($response->getContents());
+      if ($response === null) {
+        return $e->getMessage();
+      }
+    }
+
+    return isset($response) ? json_decode($response->getBody()) : [];
   }
 
   /**
@@ -362,18 +372,28 @@ class Client {
   protected function uploadPresigned($presignedUrl, $file_uri, $file_type) {
     $this->checkAuth();
 
-    $file = fopen($file_uri, 'r');
-    $response = $this->client->request(
-      "PUT",
-      $presignedUrl, [
-        'headers' => ['Content-Type' => $file_type],
-        'body' => stream_get_contents($file),
-      ]);
+    try {
+      $file = fopen($file_uri, 'r');
+      $response = $this->client->request(
+        "PUT",
+        $presignedUrl,
+        [
+          'headers' => ['Content-Type' => $file_type],
+          'body' => stream_get_contents($file),
+          'timeout' => 5,
+          'connect_timeout' => 5,
+        ]
+      );
+    }
+    catch (ClientException $e) {
+      $response = $e->getResponse()->getBody();
+      $response = json_decode($response->getContents());
+      if ($response === null) {
+        return $e->getMessage();
+      }
+    }
 
-    return [
-      'status' => json_decode($response->getStatusCode(), TRUE),
-    ];
-
+    return isset($response) ? ['status' => json_decode($response->getStatusCode(), TRUE)] : [];
   }
 
   /**
